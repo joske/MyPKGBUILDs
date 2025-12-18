@@ -1,20 +1,18 @@
-# Maintainer: Jos Dehaes <jos.dehaes@gmail.com>
-
 pkgname=xfce4-applemenu-plugin
 pkgver=0.3.0
 pkgrel=1
 pkgdesc='A panel plugin for XFCE4 that mimics the macOS Apple menu, providing a familiar and intuitive system menu experience for XFCE desktop users. '
 arch=('x86_64' 'aarch64')
-url="https://github.com/Axis0S/xfce4-applemenu-plugin/archive/refs/heads/main.tar.gz"
-makedepends=('meson' 'ninja' 'pkg-config' 'xfce4-panel' 'gtk3' 'exo' 'dbus-glib')
+url="https://github.com/Axis0S/xfce4-applemenu-plugin"
+depends=('xfce4-panel' 'gtk3' 'libxfce4util' 'libxfce4ui')
+makedepends=('meson' 'cmake' 'gtk3' 'ninja' 'pkg-config' 'exo' 'dbus-glib' 'xorgproto' 'libxrender' 'xcb-proto')
 license=('GPL-2')
 source=(
-  xfce4-applemenu-plugin-${pkgver}.tar.gz::"${url}"
+  xfce4-applemenu-plugin-${pkgver}.tar.gz::"${url}/archive/refs/tags/v${pkgver}.tar.gz"
 )
-sha256sums=(SKIP)
+sha256sums=('71c29839dea790cb30da3118541c7fd34be80c65b0b9d8d103aac42b73a998e4')
 
 build() {
-  mv "${srcdir}/${pkgname}-main" "${srcdir}/${pkgname}-${pkgver}"
   cd "${srcdir}/$pkgname-${pkgver}"
   meson setup build --prefix=/usr
   cd build
