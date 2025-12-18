@@ -1,0 +1,24 @@
+pkgbase = xfce4-applemenu-plugin
+	pkgdesc = A panel plugin for XFCE4 that mimics the macOS Apple menu, providing a familiar and intuitive system menu experience for XFCE desktop users.
+	pkgver = 0.3.0
+	pkgrel = 1
+	url = https://github.com/Axis0S/xfce4-applemenu-plugin
+	arch = x86_64
+	arch = aarch64
+	license = GPL-2.0-only
+	makedepends = meson
+	makedepends = cmake
+	makedepends = gtk3
+	makedepends = ninja
+	makedepends = pkg-config
+	makedepends = exo
+	makedepends = dbus-glib
+	makedepends = xorgproto
+	depends = xfce4-panel
+	depends = gtk3
+	depends = libxfce4util
+	depends = libxfce4ui
+	source = xfce4-applemenu-plugin-0.3.0.tar.gz::https://github.com/Axis0S/xfce4-applemenu-plugin/archive/refs/tags/v0.3.0.tar.gz
+	sha256sums = 71c29839dea790cb30da3118541c7fd34be80c65b0b9d8d103aac42b73a998e4
+
+pkgname = xfce4-applemenu-plugin
