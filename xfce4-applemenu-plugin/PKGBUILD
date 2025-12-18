@@ -6,7 +6,7 @@ arch=('x86_64' 'aarch64')
 url="https://github.com/Axis0S/xfce4-applemenu-plugin"
 depends=('xfce4-panel' 'gtk3' 'libxfce4util' 'libxfce4ui')
 makedepends=('meson' 'cmake' 'gtk3' 'ninja' 'pkg-config' 'exo' 'dbus-glib' 'xorgproto')
-license=('GPL-2')
+license=('GPL-2.0-only')
 source=(
   xfce4-applemenu-plugin-${pkgver}.tar.gz::"${url}/archive/refs/tags/v${pkgver}.tar.gz"
 )
