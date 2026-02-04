@@ -3,9 +3,11 @@ on:
   workflow_dispatch:
 jobs:
   compile:
-    name: build installer images
+    name: compile
     runs-on: ubuntu-24.04-arm
     container: menci/archlinuxarm:base-devel
+    permissions:
+      contents: write
     steps:
       - name: Check out the repo
         uses: actions/checkout@v2
@@ -25,13 +27,23 @@ jobs:
           pacman-key --populate archlinuxarm
           pacman -Syy --noconfirm archlinuxarm-keyring
           sed -i -e 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
-          pacman -Syu --noconfirm; pacman -S --needed --noconfirm git linux-firmware-qcom bc python3
+          pacman -Syu --noconfirm; pacman -S --needed --noconfirm git linux-firmware-qcom bc python3 github-cli
           useradd -m builder
           chown -R builder:builder .
           cd linux-x1e
           su builder -c 'makepkg -s'
           echo "pkgfile=$(ls *.pkg.tar.* | head -1)" >> "$GITHUB_OUTPUT"
         id: build
+      - name: upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          file=${{ steps.build.outputs.pkgfile }}
+          cd linux-x1e
+          gh release download aarch64 --repo ${{ github.repository }} --pattern myPKGBUILDs.db* --pattern myPKGBUILDs.files* || true
+          repo-add myPKGBUILDs.db.tar.gz "$file"
+          gh release upload aarch64 --repo ${{ github.repository }} --clobber "$file"
+          gh release upload aarch64 --repo ${{ github.repository }} --clobber myPKGBUILDs.db* myPKGBUILDs.files*
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
