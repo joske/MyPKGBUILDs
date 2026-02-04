@@ -1,0 +1,65 @@
+name: Check for kernel updates
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Check for new version
+        id: check
+        run: |
+          set -ex
+          latest_tag=$(curl -fsSL \
+            "https://gitlab.com/api/v4/projects/Linaro%2Farm64-laptops%2Flinux/repository/tags?search=^qcom-laptops-v&order_by=updated&sort=desc&per_page=1" \
+            | jq -r '.[0].name')
+
+          # Extract version from tag (qcom-laptops-v6.19-rc6 -> 6.19-rc6)
+          tagver=${latest_tag#qcom-laptops-v}
+          # Convert to pkgver format (6.19-rc6 -> 6.19rc6)
+          pkgver=${tagver//-/}
+
+          current_tagver=$(grep '^tagver=' linux-x1e/PKGBUILD | cut -d= -f2)
+
+          echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
+          echo "tagver=$tagver" >> "$GITHUB_OUTPUT"
+          echo "pkgver=$pkgver" >> "$GITHUB_OUTPUT"
+          echo "current_tagver=$current_tagver" >> "$GITHUB_OUTPUT"
+
+          if [ "$tagver" != "$current_tagver" ]; then
+            echo "needs_update=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_update=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update PKGBUILD
+        if: steps.check.outputs.needs_update == 'true'
+        run: |
+          set -ex
+          cd linux-x1e
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.check.outputs.pkgver }}/" PKGBUILD
+          sed -i "s/^tagver=.*/tagver=${{ steps.check.outputs.tagver }}/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+
+      - name: Commit and push
+        if: steps.check.outputs.needs_update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add linux-x1e/PKGBUILD
+          git commit -m "Update linux-x1e to ${{ steps.check.outputs.tagver }}"
+          git push
+
+      - name: Trigger build
+        if: steps.check.outputs.needs_update == 'true'
+        run: gh workflow run manual.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
