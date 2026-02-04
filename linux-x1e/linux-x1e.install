@@ -1,0 +1,67 @@
+_grub_cfg() {
+  # Common locations
+  if [ -d /boot/grub ]; then
+    echo /boot/grub/grub.cfg
+    return 0
+  fi
+
+  # Some setups use /boot/efi/EFI/...
+  # (less common for GRUB on Arch, but harmless to check)
+  if [ -d /boot/efi/EFI ]; then
+    # Not a grub.cfg location; return failure
+    return 1
+  fi
+
+  return 1
+}
+
+_run_mkinitcpio() {
+  if command -v mkinitcpio >/dev/null 2>&1; then
+    echo "==> linux-x1e: generating initramfs via mkinitcpio preset..."
+    mkinitcpio -p linux-x1e || true
+  fi
+}
+
+_run_grub_mkconfig() {
+  if ! command -v grub-mkconfig >/dev/null 2>&1; then
+    echo "==> linux-x1e: grub-mkconfig not found, skipping GRUB config regeneration"
+    return 0
+  fi
+
+  cfg="$(_grub_cfg)" || {
+    echo "==> linux-x1e: /boot/grub not found, skipping GRUB config regeneration"
+    return 0
+  }
+
+  # If /boot isn't mounted, regenerating is dangerous/useless
+  if ! mountpoint -q /boot; then
+    # It might still be a directory on rootfs (no separate /boot)
+    # That's fine; allow if it contains grub dir.
+    if [ ! -d /boot/grub ]; then
+      echo "==> linux-x1e: /boot is not a mountpoint and /boot/grub missing; skipping grub-mkconfig"
+      return 0
+    fi
+  fi
+
+  echo "==> linux-x1e: regenerating GRUB config: ${cfg}"
+  grub-mkconfig -o "${cfg}" || true
+}
+
+post_install() {
+  _run_mkinitcpio
+  _run_grub_mkconfig
+}
+
+post_upgrade() {
+  _run_mkinitcpio
+  _run_grub_mkconfig
+}
+
+post_remove() {
+  # Optional: remove initramfs images if you create unique names
+  rm -f /boot/initramfs-linux-x1e.img /boot/initramfs-linux-x1e-fallback.img 2>/dev/null || true
+
+  # Don't auto-regenerate GRUB on removal unless you really want that behavior
+  echo "==> linux-x1e: kernel removed; you may want to run grub-mkconfig manually"
+}
+

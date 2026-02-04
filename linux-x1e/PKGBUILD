@@ -1,0 +1,85 @@
+pkgname=linux-x1e
+pkgver=6.19rc6
+tagver=6.19-rc6
+pkgrel=1
+pkgdesc='Linux kernel for yoga slim7x'
+arch=('aarch64')
+url="https://gitlab.com/Linaro/arm64-laptops/linux"
+makedepends=('base-devel' 'git')
+depends=('linux-firmware-qcom')
+provides=("linux=${pkgver}")
+conflicts=("linux")
+options=(!debug)
+license=('GPL-2.0-only')
+install='linux-x1e.install'
+source=(
+    ${pkgname}-${pkgver}.tar.gz::"${url}/-/archive/qcom-laptops-v${tagver}/linux-qcom-laptops-v${tagver}.tar.gz?ref_type=tags"
+    09_linux_x1e
+    linux-x1e.install
+    mkinitcpio-linux-x1e.conf
+    x1e-firmware-hook
+    x1e-firmware-install
+)
+sha256sums=(
+    'SKIP'
+    'SKIP'
+    'SKIP'
+    'SKIP'
+    'SKIP'
+    'SKIP'
+)
+
+build() {
+    cd "${srcdir}"/linux-qcom-laptops-v${tagver}
+    make O=build defconfig
+    ./scripts/config --file build/.config \
+        -e FW_LOADER \
+        -e FW_LOADER_COMPRESS \
+        -e FW_LOADER_COMPRESS_ZSTD \
+        -e FW_LOADER_COMPRESS_XZ \
+        -e CRYPTO_LZ4
+    make O=build olddefconfig
+
+    make O=build -j$(nproc)
+}
+
+package() {
+    cd "${srcdir}"/linux-qcom-laptops-v${tagver}
+
+    local kver
+    kver="$(make -s O=build kernelrelease)"
+    install -d "${pkgdir}/boot"
+    install -d "${pkgdir}/etc/mkinitcpio.d"
+
+    # Install modules into ${pkgdir}/usr/lib/modules/<kver>
+    make O=build INSTALL_MOD_PATH="${pkgdir}/usr" modules_install
+    # Install DTBs (common on ARM64)
+    make O=build \
+        INSTALL_DTBS_PATH="${pkgdir}/boot/dtbs" \
+        dtbs_install
+
+    # Install kernel Image (ARM64 typically uses Image.gz or Image)
+    # Your build artifacts will be under build/arch/arm64/boot/
+    install -Dm644 build/arch/arm64/boot/Image.gz \
+        "${pkgdir}/boot/vmlinuz-linux-x1e"
+
+    # Optional but useful:
+    install -Dm644 build/System.map \
+        "${pkgdir}/boot/System.map-${tagver}"
+    install -Dm644 build/.config \
+        "${pkgdir}/boot/config-${tagver}"
+
+    cat >"${pkgdir}/etc/mkinitcpio.d/linux-x1e.preset" <<EOF
+ALL_config="/etc/mkinitcpio-linux-x1e.conf"
+ALL_kver="/boot/vmlinuz-linux-x1e"
+
+PRESETS=('default')
+
+default_image="/boot/initramfs-linux-x1e.img"
+EOF
+
+    install -Dm644 "${srcdir}/mkinitcpio-linux-x1e.conf" "${pkgdir}/etc/mkinitcpio-linux-x1e.conf"
+    install -Dm755 "${srcdir}/09_linux_x1e" "${pkgdir}/etc/grub.d/09_linux_x1e"
+    install -Dm755 "${srcdir}/x1e-firmware-hook" "${pkgdir}/usr/lib/initcpio/hooks/x1e-firmware"
+    install -Dm755 "${srcdir}/x1e-firmware-install" "${pkgdir}/usr/lib/initcpio/install/x1e-firmware"
+}
