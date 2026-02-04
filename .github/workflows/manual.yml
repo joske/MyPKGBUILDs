@@ -1,0 +1,46 @@
+name: build linux-x1e kernel
+on:
+  workflow_dispatch:
+jobs:
+  compile:
+    name: build installer images
+    runs-on: ubuntu-24.04-arm
+    container: menci/archlinuxarm:base-devel
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v2
+      - name: Display runner UID and GID
+        run: |
+          echo "Runner UID: $(id -u)"
+          echo "Runner GID: $(id -g)"
+        id: get_ids
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+      - name: Build
+        run: |
+          set -ex
+          sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
+          rm -rf /etc/pacman.d/gnupg/* && pacman-key --init
+          echo "allow-weak-key-signatures" >> /etc/pacman.d/gnupg/gpg.conf
+          pacman-key --populate archlinuxarm
+          pacman -Syy --noconfirm archlinuxarm-keyring
+          sed -i -e 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
+          pacman -Syu --noconfirm; pacman -S --needed --noconfirm git linux-firmware-qcom bc python3
+          useradd -m builder
+          chown -R builder:builder .
+          cd linux-x1e
+          su builder -c 'makepkg -s'
+          echo "pkgfile=$(ls *.pkg.tar.* | head -1)" >> "$GITHUB_OUTPUT"
+        id: build
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.pkgfile }}
+          path: linux-x1e/*.pkg.tar.*
+  workflow-keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: liskin/gh-workflow-keepalive@v1
