@@ -1,6 +1,6 @@
 pkgname=linux-x1e
-pkgver=6.19rc6
-tagver=6.19-rc6
+pkgver=6.19rc7
+tagver=6.19-rc7
 pkgrel=1
 pkgdesc='Linux kernel for yoga slim7x'
 arch=('aarch64')
