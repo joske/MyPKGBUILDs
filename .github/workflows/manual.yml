@@ -10,7 +10,7 @@ jobs:
       contents: write
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Display runner UID and GID
         run: |
           echo "Runner UID: $(id -u)"
@@ -45,7 +45,7 @@ jobs:
           gh release upload aarch64 --repo ${{ github.repository }} --clobber "$file"
           gh release upload aarch64 --repo ${{ github.repository }} --clobber myPKGBUILDs.db* myPKGBUILDs.files*
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.build.outputs.pkgfile }}
           path: linux-x1e/*.pkg.tar.*
