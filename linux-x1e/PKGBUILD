@@ -20,11 +20,13 @@ options=('!strip' '!debug')
 source=(
   "linux-slim7x-x1e-${_commit}.tar.gz::${url}/archive/${_commit}.tar.gz"
   x1e.config
+  revert-slim7x-disable-speakers.patch
   09_linux_x1e
   mkinitcpio-x1e.conf
   x1e-firmware-install
 )
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
