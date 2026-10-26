@@ -79,10 +79,8 @@ _package_kernel() {
   make O="$O" INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 modules_install
 
   echo "Installing device trees..."
-  install -Dt "$modulesdir/dtbs" "$O"/arch/arm64/boot/dts/qcom/*.dtb
-
-  echo "Installing x1e80100 specific DTB"
-  install -Dm644 "$O"/arch/arm64/boot/dts/qcom/x1e80100-lenovo-yoga-slim7x.dtb "$bootdir/x1e80100-lenovo-yoga-slim7x.dtb"
+  # GRUB loads /boot/dtbs/qcom/x1e80100-lenovo-yoga-slim7x.dtb
+  make O="$O" INSTALL_DTBS_PATH="$bootdir/dtbs" dtbs_install
 
   # remove build and source links
   rm -f "$modulesdir"/{source,build}
