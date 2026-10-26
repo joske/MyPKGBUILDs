@@ -1,0 +1,23 @@
+#!/bin/bash
+
+build() {
+  local d f
+
+  # The remoteprocs (ADSP/CDSP) get their firmware names from the DT, not
+  # MODULE_FIRMWARE, so mkinitcpio can't find them. If the drivers load from
+  # the initramfs without it, the DSPs never boot: no battery, USB-C or audio.
+  for d in /usr/lib/firmware/qcom /usr/lib/firmware/ath12k; do
+    [[ -d "$d" ]] || continue
+
+    while IFS= read -r -d '' f; do
+      add_file "$f"
+    done < <(find "$d" -type f -print0)
+  done
+}
+
+help() {
+  cat <<'EOF'
+Adds the qcom/ and ath12k/ firmware to the initramfs, so the X1E remoteprocs
+and wifi can start before the root filesystem is mounted.
+EOF
+}

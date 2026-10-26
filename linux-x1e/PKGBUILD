@@ -17,8 +17,14 @@ makedepends=(
 options=('!strip' '!debug')
 source=(
   "linux-slim7x-x1e-${_commit}.tar.gz::${url}/archive/${_commit}.tar.gz"
+  09_linux_x1e
+  mkinitcpio-x1e.conf
+  x1e-firmware-install
 )
-sha256sums=('SKIP')
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP')
 # aruhier's config is tuned for clang (ThinLTO)
 export LLVM=1
 export KBUILD_BUILD_HOST=archlinux
@@ -62,6 +68,8 @@ _package_kernel() {
   optdepends=('wireless-regdb: to set the correct wireless channels of your country'
               'linux-firmware: firmware images needed for some devices')
   provides=(linux=${pkgver})
+  backup=(etc/grub.d/09_linux_x1e etc/mkinitcpio.conf.d/x1e.conf)
+  install=linux-x1e.install
 
   local kernver="$(<$O/version)"
   local modulesdir="$pkgdir/usr/lib/modules/$kernver"
@@ -81,6 +89,11 @@ _package_kernel() {
   echo "Installing device trees..."
   # GRUB loads /boot/dtbs/qcom/x1e80100-lenovo-yoga-slim7x.dtb
   make O="$O" INSTALL_DTBS_PATH="$bootdir/dtbs" dtbs_install
+
+  echo "Installing GRUB entry and mkinitcpio config..."
+  install -Dm755 "$srcdir/09_linux_x1e" "$pkgdir/etc/grub.d/09_linux_x1e"
+  install -Dm644 "$srcdir/mkinitcpio-x1e.conf" "$pkgdir/etc/mkinitcpio.conf.d/x1e.conf"
+  install -Dm644 "$srcdir/x1e-firmware-install" "$pkgdir/usr/lib/initcpio/install/x1e-firmware"
 
   # remove build and source links
   rm -f "$modulesdir"/{source,build}
