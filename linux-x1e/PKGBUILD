@@ -17,6 +17,7 @@ makedepends=(
 options=('!strip' '!debug')
 source=(
   "linux-slim7x-x1e-${_commit}.tar.gz::${url}/archive/${_commit}.tar.gz"
+  x1e.config
   09_linux_x1e
   mkinitcpio-x1e.conf
   x1e-firmware-install
@@ -24,8 +25,9 @@ source=(
 sha256sums=('SKIP'
             'SKIP'
             'SKIP'
+            'SKIP'
             'SKIP')
-# aruhier's config is tuned for clang (ThinLTO)
+# aruhier.config is tuned for clang (ThinLTO)
 export LLVM=1
 export KBUILD_BUILD_HOST=archlinux
 export KBUILD_BUILD_USER=$pkgbase
@@ -50,7 +52,19 @@ prepare() {
   mkdir -p build/base
 
   echo "Setting config (base)..."
-  make fedora_defconfig aruhier.config prepare O=$PWD/build/base
+  cp ../x1e.config arch/arm64/configs/
+  make defconfig aruhier.config x1e.config prepare O=$PWD/build/base
+
+  # Catch options dropped by Kconfig changes (renames, tristate -> bool)
+  local opt missing=0
+  while read -r opt; do
+    if ! grep -qx "$opt" build/base/.config; then
+      echo "x1e.config: $opt did not survive the merge" >&2
+      missing=1
+    fi
+  done < <(grep '^CONFIG_' ../x1e.config)
+  (( ! missing )) || return 1
+
   make -s kernelrelease O=$PWD/build/base > build/base/version
 
   echo "Prepared $pkgbase version $(<build/base/version)"
