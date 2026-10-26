@@ -4,6 +4,7 @@ set -e
 KERNEL="/vmlinuz-linux-x1e"
 INITRD="/initramfs-linux-x1e.img"
 DTB="/dtbs/qcom/x1e80100-lenovo-yoga-slim7x.dtb"
+ARGS="loglevel=3 efi=novamap pd_ignore_unused clk_ignore_unused fw_devlink=off cma=128M"
 
 # Probe UUIDs on THIS machine at grub-mkconfig time
 boot_uuid="$(grub-probe --target=fs_uuid /boot 2>/dev/null || grub-probe --target=fs_uuid /)"
@@ -21,9 +22,8 @@ menuentry 'Arch Linux (linux-x1e)' {
 
     search --no-floppy --fs-uuid --set=root $boot_uuid
 
-
     echo   "Loading Linux $KERNEL ..."
-    linux  $KERNEL root=UUID=$root_uuid rw
+    linux  $KERNEL root=UUID=$root_uuid rw $ARGS
     echo   "Loading initial ramdisk $INITRD ..."
     initrd $INITRD
     echo   "Loading device tree $DTB"
@@ -42,7 +42,7 @@ menuentry 'Arch Linux, with Linux new' --class arch --class gnu-linux --class gn
         search --no-floppy --fs-uuid --set=root c8d275d2-6bb8-4ee5-b5ea-92f86f6690da
 
         echo    'Loading Linux new ...'
-        linux   /vmlinuz-new root=UUID=de26a7c2-1bf8-42c5-b559-2c1f1cef695c rw  loglevel=3 efi=novamap pd_ignore_unused clk_ignore_unused fw_devlink=off cma=128M
+        linux   /vmlinuz-new root=UUID=de26a7c2-1bf8-42c5-b559-2c1f1cef695c rw $ARGS
         echo    'Loading initial ramdisk ...'
         initrd  /initrd.img-new
         echo    'Loading initial ramdisk ...'

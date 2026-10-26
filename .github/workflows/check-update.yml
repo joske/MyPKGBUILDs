@@ -12,38 +12,51 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v6
-      - name: Check for new version
+      - name: Check for new commit
         id: check
         run: |
           set -ex
-          latest_tag=$(curl -fsSL \
-            "https://gitlab.com/api/v4/projects/Linaro%2Farm64-laptops%2Flinux/repository/tags?search=^qcom-laptops-v&order_by=updated&sort=desc&per_page=1" \
-            | jq -r '.[0].name')
+          repo=https://github.com/aruhier/linux-slim7x-x1e
 
-          # Extract version from tag (qcom-laptops-v6.19-rc6 -> 6.19-rc6)
-          tagver=${latest_tag#qcom-laptops-v}
-          # Convert to pkgver format (6.19-rc6 -> 6.19rc6)
-          pkgver=${tagver//-/}
+          # Newest custom/X.Y branch and its head commit
+          read -r commit ref < <(git ls-remote --heads "$repo" 'custom/*' \
+            | grep -E 'refs/heads/custom/[0-9]+\.[0-9]+$' | sort -k2 -V | tail -1)
+          branch=${ref#refs/heads/}
 
-          current_tagver=$(grep '^tagver=' linux-x1e/PKGBUILD | cut -d= -f2)
+          current_commit=$(grep '^_commit=' linux-x1e/PKGBUILD | cut -d= -f2)
 
-          echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
-          echo "tagver=$tagver" >> "$GITHUB_OUTPUT"
-          echo "pkgver=$pkgver" >> "$GITHUB_OUTPUT"
-          echo "current_tagver=$current_tagver" >> "$GITHUB_OUTPUT"
-
-          if [ "$tagver" != "$current_tagver" ]; then
-            echo "needs_update=true" >> "$GITHUB_OUTPUT"
-          else
+          if [ "$commit" = "$current_commit" ]; then
             echo "needs_update=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          # Kernel version at that commit (7.4.0-rc1 -> 7.4.0rc1)
+          makefile=$(curl -fsSL "https://raw.githubusercontent.com/aruhier/linux-slim7x-x1e/$commit/Makefile")
+          v() { sed -n "s/^$1 = *//p" <<<"$makefile" | head -1; }
+          extra=$(v EXTRAVERSION)
+
+          # Same scheme as pkgver() in the PKGBUILD
+          committed=$(curl -fsSL "https://api.github.com/repos/aruhier/linux-slim7x-x1e/commits/$commit" \
+            | jq -r .commit.committer.date)
+          date=$(date -u -d "$committed" +%Y%m%d%H%M)
+          pkgver="$(v VERSION).$(v PATCHLEVEL).$(v SUBLEVEL)${extra//-/}.$date"
+
+          {
+            echo "needs_update=true"
+            echo "branch=$branch"
+            echo "commit=$commit"
+            echo "date=$date"
+            echo "pkgver=$pkgver"
+          } >> "$GITHUB_OUTPUT"
       - name: Update PKGBUILD
         if: steps.check.outputs.needs_update == 'true'
         run: |
           set -ex
           cd linux-x1e
+          sed -i "s|^_branch=.*|_branch=${{ steps.check.outputs.branch }}|" PKGBUILD
+          sed -i "s/^_commit=.*/_commit=${{ steps.check.outputs.commit }}/" PKGBUILD
+          sed -i "s/^_date=[0-9]*/_date=${{ steps.check.outputs.date }}/" PKGBUILD
           sed -i "s/^pkgver=.*/pkgver=${{ steps.check.outputs.pkgver }}/" PKGBUILD
-          sed -i "s/^tagver=.*/tagver=${{ steps.check.outputs.tagver }}/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
       - name: Commit and push
         if: steps.check.outputs.needs_update == 'true'
@@ -51,10 +64,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add linux-x1e/PKGBUILD
-          git commit -m "Update linux-x1e to ${{ steps.check.outputs.tagver }}"
+          git commit -m "Update linux-x1e to ${{ steps.check.outputs.pkgver }} (${{ steps.check.outputs.branch }} @ ${{ steps.check.outputs.commit }})"
           git push
       - name: Trigger build
         if: steps.check.outputs.needs_update == 'true'
-        run: gh workflow run manual.yml
+        run: gh workflow run manual.yml --ref ${{ github.ref_name }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  workflow-keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: liskin/gh-workflow-keepalive@v1

@@ -16,8 +16,6 @@ jobs:
           echo "Runner UID: $(id -u)"
           echo "Runner GID: $(id -g)"
         id: get_ids
-      - name: Delete huge unnecessary tools folder
-        run: rm -rf /opt/hostedtoolcache
       - name: Build
         run: |
           set -ex
@@ -27,32 +25,29 @@ jobs:
           pacman-key --populate archlinuxarm
           pacman -Syy --noconfirm archlinuxarm-keyring
           sed -i -e 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
-          pacman -Syu --noconfirm; pacman -S --needed --noconfirm git linux-firmware-qcom bc python3 github-cli
+          pacman -Syu --noconfirm; pacman -S --needed --noconfirm git python3 github-cli
+          # builder has no sudo, so install makedepends as root
+          (source linux-x1e/PKGBUILD && pacman -S --needed --noconfirm "${makedepends[@]}")
           useradd -m builder
           chown -R builder:builder .
           cd linux-x1e
-          su builder -c 'makepkg -s'
-          echo "pkgfile=$(ls *.pkg.tar.* | head -1)" >> "$GITHUB_OUTPUT"
-        id: build
+          df -h .
+          su builder -c 'makepkg --noconfirm'
+          df -h .
       - name: upload to release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          file=${{ steps.build.outputs.pkgfile }}
+          set -ex
           cd linux-x1e
-          gh release download aarch64 --repo ${{ github.repository }} --pattern myPKGBUILDs.db* --pattern myPKGBUILDs.files* || true
-          repo-add myPKGBUILDs.db.tar.gz "$file"
-          gh release upload aarch64 --repo ${{ github.repository }} --clobber "$file"
+          files=(*.pkg.tar.*)
+          gh release download aarch64 --repo ${{ github.repository }} --pattern 'myPKGBUILDs.db*' --pattern 'myPKGBUILDs.files*' || true
+          repo-add myPKGBUILDs.db.tar.gz "${files[@]}"
+          gh release upload aarch64 --repo ${{ github.repository }} --clobber "${files[@]}"
           gh release upload aarch64 --repo ${{ github.repository }} --clobber myPKGBUILDs.db* myPKGBUILDs.files*
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.build.outputs.pkgfile }}
+          name: linux-x1e-packages
           path: linux-x1e/*.pkg.tar.*
-  workflow-keepalive:
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - uses: liskin/gh-workflow-keepalive@v1

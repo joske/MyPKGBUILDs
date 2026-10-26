@@ -1,85 +1,233 @@
-pkgname=linux-x1e
-pkgver=6.19rc7
-tagver=6.19-rc7
+# _branch, _commit and _date are bumped by .github/workflows/check-update.yml;
+# pkgver() derives the version from them and the kernel source.
+_branch=custom/7.3
+_commit=1760f896baf4c6b0fdb823fce225b213948500cc
+_date=202610252230 # committer date of _commit (UTC)
+pkgver=7.3.0.202610252230
 pkgrel=1
-pkgdesc='Linux kernel for yoga slim7x'
+
+pkgbase=linux-x1e
+_srcname=linux-slim7x-x1e-${_commit}
+_desc="AArch64 kernel for x1e"
 arch=('aarch64')
-url="https://gitlab.com/Linaro/arm64-laptops/linux"
-makedepends=('base-devel' 'git')
-depends=('linux-firmware-qcom')
-provides=("linux=${pkgver}")
-conflicts=("linux")
-options=(!debug)
+url="https://github.com/aruhier/linux-slim7x-x1e"
 license=('GPL-2.0-only')
-install='linux-x1e.install'
+
+makedepends=(
+  bc clang cpio dtc kmod libelf lld llvm pahole perl tar xz
+)
+options=('!strip' '!debug')
 source=(
-    ${pkgname}-${pkgver}.tar.gz::"${url}/-/archive/qcom-laptops-v${tagver}/linux-qcom-laptops-v${tagver}.tar.gz?ref_type=tags"
-    09_linux_x1e
-    linux-x1e.install
-    mkinitcpio-linux-x1e.conf
-    x1e-firmware-hook
-    x1e-firmware-install
+  "linux-slim7x-x1e-${_commit}.tar.gz::${url}/archive/${_commit}.tar.gz"
+  x1e.config
+  revert-slim7x-disable-speakers.patch
+  09_linux_x1e
+  mkinitcpio-x1e.conf
+  x1e-firmware-install
 )
-sha256sums=(
-    'SKIP'
-    'SKIP'
-    'SKIP'
-    'SKIP'
-    'SKIP'
-    'SKIP'
-)
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP')
+# aruhier.config is tuned for clang (ThinLTO)
+export LLVM=1
+export KBUILD_BUILD_HOST=archlinux
+export KBUILD_BUILD_USER=$pkgbase
+export KBUILD_BUILD_TIMESTAMP="$(date -Ru${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EPOCH})"
+
+pkgver() {
+  cd $_srcname
+  # 7.4.0-rc1 -> 7.4.0rc1, then the commit date so new commits on the same
+  # kernel version still upgrade
+  echo "$(make -s kernelversion | tr -d -).${_date}"
+}
+
+prepare() {
+  cd $_srcname
+
+  echo "Setting version..."
+  echo "-$pkgrel" > localversion.10-pkgrel
+
+  local src
+  for src in "${source[@]}"; do
+    src="${src%%::*}"
+    src="${src##*/}"
+    [[ $src = *.patch ]] || continue
+    echo "Applying patch $src..."
+    patch -Np1 < "../$src"
+  done
+
+  echo "Creating build directories..."
+  mkdir -p build/base
+
+  echo "Setting config (base)..."
+  cp ../x1e.config arch/arm64/configs/
+  make defconfig aruhier.config x1e.config prepare O=$PWD/build/base
+
+  # Catch options dropped by Kconfig changes (renames, tristate -> bool)
+  local opt missing=0
+  while read -r opt; do
+    if ! grep -qx "$opt" build/base/.config; then
+      echo "x1e.config: $opt did not survive the merge" >&2
+      missing=1
+    fi
+  done < <(grep '^CONFIG_' ../x1e.config)
+  (( ! missing )) || return 1
+
+  make -s kernelrelease O=$PWD/build/base > build/base/version
+
+  echo "Prepared $pkgbase version $(<build/base/version)"
+}
 
 build() {
-    cd "${srcdir}"/linux-qcom-laptops-v${tagver}
-    make O=build defconfig
-    ./scripts/config --file build/.config \
-        -e FW_LOADER \
-        -e FW_LOADER_COMPRESS \
-        -e FW_LOADER_COMPRESS_ZSTD \
-        -e FW_LOADER_COMPRESS_XZ \
-        -e CRYPTO_LZ4
-    make O=build olddefconfig
-
-    make O=build -j$(nproc)
+  cd $_srcname
+  echo "Building base..."
+  make all O=$PWD/build/base -j$(nproc)
 }
 
-package() {
-    cd "${srcdir}"/linux-qcom-laptops-v${tagver}
+_package_kernel() {
+  pkgdesc="The $_desc kernel and modules"
+  depends=(coreutils kmod initramfs $2)
+  optdepends=('wireless-regdb: to set the correct wireless channels of your country'
+              'linux-firmware: firmware images needed for some devices')
+  provides=(linux=${pkgver})
+  backup=(etc/grub.d/09_linux_x1e etc/mkinitcpio.conf.d/x1e.conf)
+  install=linux-x1e.install
 
-    local kver
-    kver="$(make -s O=build kernelrelease)"
-    install -d "${pkgdir}/boot"
-    install -d "${pkgdir}/etc/mkinitcpio.d"
+  local kernver="$(<$O/version)"
+  local modulesdir="$pkgdir/usr/lib/modules/$kernver"
+  local bootdir="$pkgdir/boot"
 
-    # Install modules into ${pkgdir}/usr/lib/modules/<kver>
-    make O=build INSTALL_MOD_PATH="${pkgdir}/usr" modules_install
-    # Install DTBs (common on ARM64)
-    make O=build \
-        INSTALL_DTBS_PATH="${pkgdir}/boot/dtbs" \
-        dtbs_install
+  echo "Installing boot image..."
+  # systemd expects to find the kernel here to allow hibernation
+  # https://github.com/systemd/systemd/commit/edda44605f06a41fb86b7ab8128dcf99161d2344
+  install -Dm644 "$O/$(make -s O="$O" image_name)" "$modulesdir/vmlinuz"
 
-    # Install kernel Image (ARM64 typically uses Image.gz or Image)
-    # Your build artifacts will be under build/arch/arm64/boot/
-    install -Dm644 build/arch/arm64/boot/Image.gz \
-        "${pkgdir}/boot/vmlinuz-linux-x1e"
+  # Used by mkinitcpio to name the kernel
+  echo "$1" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
 
-    # Optional but useful:
-    install -Dm644 build/System.map \
-        "${pkgdir}/boot/System.map-${tagver}"
-    install -Dm644 build/.config \
-        "${pkgdir}/boot/config-${tagver}"
+  echo "Installing modules..."
+  make O="$O" INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 modules_install
 
-    cat >"${pkgdir}/etc/mkinitcpio.d/linux-x1e.preset" <<EOF
-ALL_config="/etc/mkinitcpio-linux-x1e.conf"
-ALL_kver="/boot/vmlinuz-linux-x1e"
+  echo "Installing device trees..."
+  # GRUB loads /boot/dtbs/qcom/x1e80100-lenovo-yoga-slim7x.dtb
+  make O="$O" INSTALL_DTBS_PATH="$bootdir/dtbs" dtbs_install
 
-PRESETS=('default')
+  echo "Installing GRUB entry and mkinitcpio config..."
+  install -Dm755 "$srcdir/09_linux_x1e" "$pkgdir/etc/grub.d/09_linux_x1e"
+  install -Dm644 "$srcdir/mkinitcpio-x1e.conf" "$pkgdir/etc/mkinitcpio.conf.d/x1e.conf"
+  install -Dm644 "$srcdir/x1e-firmware-install" "$pkgdir/usr/lib/initcpio/install/x1e-firmware"
 
-default_image="/boot/initramfs-linux-x1e.img"
-EOF
-
-    install -Dm644 "${srcdir}/mkinitcpio-linux-x1e.conf" "${pkgdir}/etc/mkinitcpio-linux-x1e.conf"
-    install -Dm755 "${srcdir}/09_linux_x1e" "${pkgdir}/etc/grub.d/09_linux_x1e"
-    install -Dm755 "${srcdir}/x1e-firmware-hook" "${pkgdir}/usr/lib/initcpio/hooks/x1e-firmware"
-    install -Dm755 "${srcdir}/x1e-firmware-install" "${pkgdir}/usr/lib/initcpio/install/x1e-firmware"
+  # remove build and source links
+  rm -f "$modulesdir"/{source,build}
 }
+
+_package() {
+  cd $_srcname
+  export O="$PWD/build/base"
+  _package_kernel "$pkgbase"
+}
+
+_package-headers() {
+  pkgdesc="Headers and scripts for building modules for the $_desc kernel"
+  depends=(pahole)
+
+  KARCH=arm64
+
+  cd $_srcname
+  O=build/base
+  local builddir="$pkgdir/usr/lib/modules/$(<${O}/version)/build"
+
+  echo "Installing build files..."
+  install -Dt "$builddir" -m644 $O/.config Makefile $O/Module.symvers $O/System.map \
+    localversion.* $O/version $O/vmlinux
+  install -Dt "$builddir/kernel" -m644 kernel/Makefile
+  cp -t "$builddir" -a scripts $O/scripts
+
+  # required when STACK_VALIDATION is enabled
+  #install -Dt "$builddir/tools/objtool" tools/objtool/objtool
+
+  # required when DEBUG_INFO_BTF_MODULES is enabled
+  if [[ -e $O/tools/bpf/resolve_btfids/resolve_btfids ]]; then
+    install -Dt "$builddir/tools/bpf/resolve_btfids" $O/tools/bpf/resolve_btfids/resolve_btfids
+  fi
+
+  echo "Installing headers..."
+  cp -t "$builddir" -a include $O/include
+
+  install -Dt "${builddir}/arch/${KARCH}" -m644 arch/${KARCH}/Makefile
+  install -Dt "${builddir}/arch/${KARCH}/kernel" -m644 $O/arch/${KARCH}/kernel/asm-offsets.s
+  cp -t "${builddir}/arch/${KARCH}" -a arch/${KARCH}/include $O/arch/${KARCH}/include
+
+  install -Dt "$builddir/drivers/md" -m644 drivers/md/*.h
+  install -Dt "$builddir/net/mac80211" -m644 net/mac80211/*.h
+
+  # https://bugs.archlinux.org/task/13146
+  install -Dt "$builddir/drivers/media/i2c" -m644 drivers/media/i2c/msp3400-driver.h
+
+  # https://bugs.archlinux.org/task/20402
+  install -Dt "$builddir/drivers/media/usb/dvb-usb" -m644 drivers/media/usb/dvb-usb/*.h
+  install -Dt "$builddir/drivers/media/dvb-frontends" -m644 drivers/media/dvb-frontends/*.h
+  install -Dt "$builddir/drivers/media/tuners" -m644 drivers/media/tuners/*.h
+
+  # https://bugs.archlinux.org/task/71392
+  install -Dt "$builddir/drivers/iio/common/hid-sensors" -m644 drivers/iio/common/hid-sensors/*.h
+
+  echo "Installing KConfig files..."
+  find . -name 'Kconfig*' -exec install -Dm644 {} "$builddir/{}" \;
+
+  echo "Removing unneeded architectures..."
+  local arch
+  for arch in "$builddir"/arch/*/; do
+    [[ $arch = */${KARCH}/ ]] && continue
+    echo "Removing $(basename "$arch")"
+    rm -r "$arch"
+  done
+
+  echo "Removing documentation..."
+  rm -r "$builddir/Documentation"
+
+  echo "Removing broken symlinks..."
+  find -L "$builddir" -type l -printf 'Removing %P\n' -delete
+
+  echo "Removing loose objects..."
+  find "$builddir" -type f -name '*.o' -printf 'Removing %P\n' -delete
+
+  echo "Removing cmd files..."
+  find "$builddir" -type f -name '*.cmd' -printf 'Removing %P\n' -delete
+
+  echo "Stripping build tools..."
+  local file
+  while read -rd '' file; do
+    case "$(file -bi "$file")" in
+      application/x-sharedlib\;*)      # Libraries (.so)
+        strip -v $STRIP_SHARED "$file" ;;
+      application/x-archive\;*)        # Libraries (.a)
+        strip -v $STRIP_STATIC "$file" ;;
+      application/x-executable\;*)     # Binaries
+        strip -v $STRIP_BINARIES "$file" ;;
+      application/x-pie-executable\;*) # Relocatable binaries
+        strip -v $STRIP_SHARED "$file" ;;
+    esac
+  done < <(find "$builddir" -type f -perm -u+x ! -name vmlinux -print0)
+
+  echo "Stripping vmlinux..."
+  strip -v $STRIP_STATIC "$builddir/vmlinux"
+
+  echo "Adding symlink..."
+  mkdir -p "$pkgdir/usr/src"
+  ln -sr "$builddir" "$pkgdir/usr/src/$pkgbase"
+
+}
+
+pkgname=("$pkgbase" "$pkgbase-headers")
+for _p in "${pkgname[@]}"; do
+  eval "package_$_p() {
+    $(declare -f "_package${_p#$pkgbase}")
+    _package${_p#$pkgbase}
+  }"
+done
+
+# vim:set ts=8 sts=2 sw=2 et:
