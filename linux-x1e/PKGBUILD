@@ -1,7 +1,9 @@
-# _branch, _commit, pkgver and pkgrel are bumped by .github/workflows/check-update.yml
+# _branch, _commit and _date are bumped by .github/workflows/check-update.yml;
+# pkgver() derives the version from them and the kernel source.
 _branch=custom/7.3
 _commit=1760f896baf4c6b0fdb823fce225b213948500cc
-pkgver=7.3.0
+_date=202610252230 # committer date of _commit (UTC)
+pkgver=7.3.0.202610252230
 pkgrel=1
 
 pkgbase=linux-x1e
@@ -32,6 +34,13 @@ export LLVM=1
 export KBUILD_BUILD_HOST=archlinux
 export KBUILD_BUILD_USER=$pkgbase
 export KBUILD_BUILD_TIMESTAMP="$(date -Ru${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EPOCH})"
+
+pkgver() {
+  cd $_srcname
+  # 7.4.0-rc1 -> 7.4.0rc1, then the commit date so new commits on the same
+  # kernel version still upgrade
+  echo "$(make -s kernelversion | tr -d -).${_date}"
+}
 
 prepare() {
   cd $_srcname

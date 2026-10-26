@@ -24,8 +24,6 @@ jobs:
           branch=${ref#refs/heads/}
 
           current_commit=$(grep '^_commit=' linux-x1e/PKGBUILD | cut -d= -f2)
-          current_pkgver=$(grep '^pkgver=' linux-x1e/PKGBUILD | cut -d= -f2)
-          current_pkgrel=$(grep '^pkgrel=' linux-x1e/PKGBUILD | cut -d= -f2)
 
           if [ "$commit" = "$current_commit" ]; then
             echo "needs_update=false" >> "$GITHUB_OUTPUT"
@@ -36,21 +34,19 @@ jobs:
           makefile=$(curl -fsSL "https://raw.githubusercontent.com/aruhier/linux-slim7x-x1e/$commit/Makefile")
           v() { sed -n "s/^$1 = *//p" <<<"$makefile" | head -1; }
           extra=$(v EXTRAVERSION)
-          pkgver="$(v VERSION).$(v PATCHLEVEL).$(v SUBLEVEL)${extra//-/}"
 
-          # Same kernel version but new commits on the branch: bump pkgrel
-          if [ "$pkgver" = "$current_pkgver" ]; then
-            pkgrel=$((current_pkgrel + 1))
-          else
-            pkgrel=1
-          fi
+          # Same scheme as pkgver() in the PKGBUILD
+          committed=$(curl -fsSL "https://api.github.com/repos/aruhier/linux-slim7x-x1e/commits/$commit" \
+            | jq -r .commit.committer.date)
+          date=$(date -u -d "$committed" +%Y%m%d%H%M)
+          pkgver="$(v VERSION).$(v PATCHLEVEL).$(v SUBLEVEL)${extra//-/}.$date"
 
           {
             echo "needs_update=true"
             echo "branch=$branch"
             echo "commit=$commit"
+            echo "date=$date"
             echo "pkgver=$pkgver"
-            echo "pkgrel=$pkgrel"
           } >> "$GITHUB_OUTPUT"
       - name: Update PKGBUILD
         if: steps.check.outputs.needs_update == 'true'
@@ -59,15 +55,16 @@ jobs:
           cd linux-x1e
           sed -i "s|^_branch=.*|_branch=${{ steps.check.outputs.branch }}|" PKGBUILD
           sed -i "s/^_commit=.*/_commit=${{ steps.check.outputs.commit }}/" PKGBUILD
+          sed -i "s/^_date=[0-9]*/_date=${{ steps.check.outputs.date }}/" PKGBUILD
           sed -i "s/^pkgver=.*/pkgver=${{ steps.check.outputs.pkgver }}/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=${{ steps.check.outputs.pkgrel }}/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
       - name: Commit and push
         if: steps.check.outputs.needs_update == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add linux-x1e/PKGBUILD
-          git commit -m "Update linux-x1e to ${{ steps.check.outputs.pkgver }}-${{ steps.check.outputs.pkgrel }} (${{ steps.check.outputs.branch }} @ ${{ steps.check.outputs.commit }})"
+          git commit -m "Update linux-x1e to ${{ steps.check.outputs.pkgver }} (${{ steps.check.outputs.branch }} @ ${{ steps.check.outputs.commit }})"
           git push
       - name: Trigger build
         if: steps.check.outputs.needs_update == 'true'
