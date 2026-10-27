@@ -1,23 +1,45 @@
 #!/bin/bash
 
 build() {
-  local d f
+  local dt=/sys/firmware/devicetree/base prop name f found=0
 
-  # The remoteprocs (ADSP/CDSP) get their firmware names from the DT, not
-  # MODULE_FIRMWARE, so mkinitcpio can't find them. If the drivers load from
-  # the initramfs without it, the DSPs never boot: no battery, USB-C or audio.
-  for d in /usr/lib/firmware/qcom /usr/lib/firmware/ath12k; do
-    [[ -d "$d" ]] || continue
+  # The remoteprocs (ADSP/CDSP), GPU zap shader and video codec get their
+  # firmware names from the DT, not MODULE_FIRMWARE, so mkinitcpio can't
+  # find them. If the drivers load from the initramfs without it, the DSPs
+  # never boot: no battery, USB-C or audio. Only add what this machine's DT
+  # asks for; all of qcom/ is hundreds of MB.
+  if [[ ! -d $dt ]]; then
+    warning "x1e-firmware: no devicetree in /sys, adding no firmware"
+    return
+  fi
 
+  while IFS= read -r -d '' prop; do
+    while IFS= read -r -d '' name; do
+      [[ -n $name ]] || continue
+      for f in "/usr/lib/firmware/$name"{,.zst,.xz}; do
+        if [[ -f $f ]]; then
+          add_file "$f"
+          found=1
+        fi
+      done
+    done < "$prop"
+  done < <(find "$dt" -name firmware-name -type f -print0)
+
+  (( found )) || warning "x1e-firmware: no DT firmware found in /usr/lib/firmware"
+
+  # ath12k only declares a wildcard MODULE_FIRMWARE, which mkinitcpio doesn't
+  # expand, and it loads from the initramfs when autodetect includes it
+  if [[ -d /usr/lib/firmware/ath12k/WCN7850 ]]; then
     while IFS= read -r -d '' f; do
       add_file "$f"
-    done < <(find "$d" -type f -print0)
-  done
+    done < <(find /usr/lib/firmware/ath12k/WCN7850 -type f -print0)
+  fi
 }
 
 help() {
   cat <<'EOF'
-Adds the qcom/ and ath12k/ firmware to the initramfs, so the X1E remoteprocs
-and wifi can start before the root filesystem is mounted.
+Adds the firmware named by the devicetree's firmware-name properties
+(ADSP/CDSP, GPU zap shader, video codec) and the WCN7850 wifi firmware to
+the initramfs, so they can start before the root filesystem is mounted.
 EOF
 }

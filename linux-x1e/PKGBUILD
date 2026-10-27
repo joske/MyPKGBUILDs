@@ -2,9 +2,9 @@
 # pkgver() derives the version from them and the kernel source.
 _branch=custom/7.3
 _commit=1760f896baf4c6b0fdb823fce225b213948500cc
-_date=202610252230 # committer date of _commit (UTC)
-pkgver=7.3.0.202610252230
-pkgrel=4
+_date=202610272026 # committer date of _commit (UTC), or later to force an upgrade
+pkgver=7.3.0.202610272026
+pkgrel=1
 
 pkgbase=linux-x1e
 _srcname=linux-slim7x-x1e-${_commit}
@@ -114,8 +114,11 @@ _package_kernel() {
   make O="$O" INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 modules_install
 
   echo "Installing device trees..."
-  # GRUB loads /boot/dtbs/qcom/x1e80100-lenovo-yoga-slim7x.dtb
-  make O="$O" INSTALL_DTBS_PATH="$bootdir/dtbs" dtbs_install
+  # All of them with the modules; only the one GRUB loads goes to /boot,
+  # which is too small for the full set
+  make O="$O" INSTALL_DTBS_PATH="$modulesdir/dtbs" dtbs_install
+  install -Dm644 "$modulesdir/dtbs/qcom/x1e80100-lenovo-yoga-slim7x.dtb" \
+    "$bootdir/dtbs/qcom/x1e80100-lenovo-yoga-slim7x.dtb"
 
   echo "Installing GRUB entry and mkinitcpio config..."
   install -Dm755 "$srcdir/09_linux_x1e" "$pkgdir/etc/grub.d/09_linux_x1e"
