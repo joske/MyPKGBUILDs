@@ -1,6 +1,8 @@
 name: build linux-x1e kernel
 on:
   workflow_dispatch:
+env:
+  PKG: linux-x1e
 jobs:
   compile:
     name: compile
@@ -27,10 +29,10 @@ jobs:
           sed -i -e 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
           pacman -Syu --noconfirm; pacman -S --needed --noconfirm git python3 github-cli
           # builder has no sudo, so install makedepends as root
-          (source linux-x1e/PKGBUILD && pacman -S --needed --noconfirm "${makedepends[@]}")
+          (source "$PKG/PKGBUILD" && pacman -S --needed --noconfirm "${makedepends[@]}")
           useradd -m builder
           chown -R builder:builder .
-          cd linux-x1e
+          cd "$PKG"
           df -h .
           su builder -c 'makepkg --noconfirm'
           df -h .
@@ -40,14 +42,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -ex
-          cd linux-x1e
+          cd "$PKG"
           files=(*.pkg.tar.*)
           gh release download aarch64 --repo ${{ github.repository }} --pattern 'myPKGBUILDs.db*' --pattern 'myPKGBUILDs.files*' || true
           repo-add myPKGBUILDs.db.tar.gz "${files[@]}"
+
+          # Earlier versions of these packages. Match the exact pkgname plus a
+          # version: a prefix match would also catch linux-x1e-headers and
+          # linux-x1e-jg when building linux-x1e.
+          old=()
+          for f in "${files[@]}"; do
+            name=$(bsdtar -xOf "$f" .PKGINFO | sed -n 's/^pkgname = //p')
+            mapfile -t -O "${#old[@]}" old < <(gh release view aarch64 --repo ${{ github.repository }} \
+              --json assets --jq ".assets[].name | select(test(\"^${name}-[0-9]\"))")
+          done
+
           gh release upload aarch64 --repo ${{ github.repository }} --clobber "${files[@]}"
           gh release upload aarch64 --repo ${{ github.repository }} --clobber myPKGBUILDs.db* myPKGBUILDs.files*
+
+          # Only now that the database points at the new versions
+          for f in "${old[@]}"; do
+            [[ -f $f ]] && continue
+            gh release delete-asset aarch64 --repo ${{ github.repository }} -y "$f" || echo "could not remove $f"
+          done
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: linux-x1e-packages
-          path: linux-x1e/*.pkg.tar.*
+          name: ${{ env.PKG }}-packages
+          path: ${{ env.PKG }}/*.pkg.tar.*
