@@ -74,7 +74,7 @@ prepare() {
         echo "$cfg: $opt did not survive the merge" >&2
         missing=1
       fi
-    done < <(grep '^CONFIG_' ../$cfg)
+    done < <(grep -E '^CONFIG_|^# CONFIG_.* is not set$' ../$cfg)
   done
   (( ! missing )) || return 1
 
