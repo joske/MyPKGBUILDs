@@ -14,7 +14,7 @@ url="https://github.com/aruhier/linux-slim7x-x1e"
 license=('GPL-2.0-only')
 
 makedepends=(
-  bc clang cpio dtc kmod libelf lld llvm pahole perl tar xz
+  bc clang cpio dtc kmod libelf lld llvm pahole perl tar xz zstd
 )
 options=('!strip' '!debug')
 source=(
