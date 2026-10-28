@@ -4,7 +4,7 @@ _branch=custom/7.3
 _commit=1760f896baf4c6b0fdb823fce225b213948500cc
 _date=202610272026 # committer date of _commit (UTC), or later to force an upgrade
 pkgver=7.3.0.202610272026
-pkgrel=1
+pkgrel=2
 
 pkgbase=linux-x1e
 _srcname=linux-slim7x-x1e-${_commit}
