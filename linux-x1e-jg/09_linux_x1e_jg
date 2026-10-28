@@ -1,0 +1,32 @@
+#!/bin/sh
+set -e
+
+KERNEL="/vmlinuz-linux-x1e-jg"
+INITRD="/initramfs-linux-x1e-jg.img"
+DTB="/dtbs-jg/qcom/x1e80100-lenovo-yoga-slim7x.dtb"
+ARGS="loglevel=3 efi=novamap pd_ignore_unused clk_ignore_unused fw_devlink=off cma=128M"
+
+# Probe UUIDs on THIS machine at grub-mkconfig time
+boot_uuid="$(grub-probe --target=fs_uuid /boot 2>/dev/null || grub-probe --target=fs_uuid /)"
+root_uuid="$(grub-probe --target=fs_uuid /)"
+
+cat <<EOF
+menuentry 'Arch Linux (linux-x1e-jg)' {
+    savedefault
+    load_video
+    insmod gzio
+    insmod part_gpt
+    insmod ext2
+    insmod btrfs
+    insmod fat
+
+    search --no-floppy --fs-uuid --set=root $boot_uuid
+
+    echo   "Loading Linux $KERNEL ..."
+    linux  $KERNEL root=UUID=$root_uuid rw $ARGS
+    echo   "Loading initial ramdisk $INITRD ..."
+    initrd $INITRD
+    echo   "Loading device tree $DTB"
+    devicetree $DTB
+}
+EOF

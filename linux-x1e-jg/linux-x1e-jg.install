@@ -1,0 +1,24 @@
+# The initramfs is built by the mkinitcpio pacman hook. GRUB needs a
+# regenerated config to pick up /etc/grub.d/09_linux_x1e_jg.
+
+_grub_mkconfig() {
+  if ! command -v grub-mkconfig >/dev/null 2>&1 || [ ! -d /boot/grub ]; then
+    echo "==> linux-x1e-jg: no GRUB found, add the entry from /etc/grub.d/09_linux_x1e_jg yourself"
+    return 0
+  fi
+
+  echo "==> linux-x1e-jg: regenerating /boot/grub/grub.cfg"
+  grub-mkconfig -o /boot/grub/grub.cfg || true
+}
+
+post_install() {
+  _grub_mkconfig
+}
+
+post_upgrade() {
+  _grub_mkconfig
+}
+
+post_remove() {
+  _grub_mkconfig
+}

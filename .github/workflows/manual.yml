@@ -1,4 +1,4 @@
-name: build linux-x1e kernel
+name: build linux-x1e-jg kernel
 on:
   workflow_dispatch:
 jobs:
@@ -27,10 +27,10 @@ jobs:
           sed -i -e 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
           pacman -Syu --noconfirm; pacman -S --needed --noconfirm git python3 github-cli
           # builder has no sudo, so install makedepends as root
-          (source linux-x1e/PKGBUILD && pacman -S --needed --noconfirm "${makedepends[@]}")
+          (source linux-x1e-jg/PKGBUILD && pacman -S --needed --noconfirm "${makedepends[@]}")
           useradd -m builder
           chown -R builder:builder .
-          cd linux-x1e
+          cd linux-x1e-jg
           df -h .
           su builder -c 'makepkg --noconfirm'
           df -h .
@@ -40,7 +40,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -ex
-          cd linux-x1e
+          cd linux-x1e-jg
           files=(*.pkg.tar.*)
           gh release download aarch64 --repo ${{ github.repository }} --pattern 'myPKGBUILDs.db*' --pattern 'myPKGBUILDs.files*' || true
           repo-add myPKGBUILDs.db.tar.gz "${files[@]}"
@@ -49,5 +49,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: linux-x1e-packages
-          path: linux-x1e/*.pkg.tar.*
+          name: linux-x1e-jg-packages
+          path: linux-x1e-jg/*.pkg.tar.*
