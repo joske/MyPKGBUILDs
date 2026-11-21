@@ -5,3 +5,5 @@ pkg
 *.zstd
 *.zst
 myPKGBUILDs.*
+cargo-home
+wezterm-git/wezterm
